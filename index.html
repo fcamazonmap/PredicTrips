@@ -94,6 +94,20 @@
   input[type=text]::placeholder{color:#6b7288;}
   input[type=text]:focus, select:focus{outline:2px solid var(--accent);outline-offset:1px;}
   select{appearance:none;-webkit-appearance:none;}
+
+  .input-wrapper{position:relative;}
+  .autocomplete-suggestions{
+    display:none;position:absolute;top:100%;left:0;right:0;margin-top:4px;
+    background:var(--panel-alt);border:1px solid var(--border);border-radius:var(--radius-sm);
+    max-height:180px;overflow-y:auto;z-index:50;box-shadow:0 8px 20px rgba(0,0,0,0.3);
+  }
+  .autocomplete-suggestion{
+    padding:8px 12px;font-size:12.5px;color:var(--text);cursor:pointer;
+    display:flex;justify-content:space-between;gap:10px;align-items:center;
+  }
+  .autocomplete-suggestion .sub-info{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .autocomplete-suggestion:hover, .autocomplete-suggestion.active{background:var(--accent);color:#fff;}
+  .autocomplete-suggestion:hover .sub-info, .autocomplete-suggestion.active .sub-info{color:rgba(255,255,255,0.85);}
   .hint{font-family:var(--font);font-size:12.5px;color:var(--muted);margin-top:8px;line-height:1.6;}
   .hint code{background:var(--input-bg);color:#c7cce0;padding:2px 6px;border-radius:4px;font-size:11.5px;}
 
@@ -179,21 +193,20 @@
 </head>
 <body>
 <div class="wrap">
-  <header>
-    <h1>Predict Trips</h1>
-    <p>Paste Relay listings into your sheet, then spot the patterns in when they show up.</p>
+  <header style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+    <div>
+      <h1>Predict Trips</h1>
+      <p>Paste Relay listings into your sheet, then spot the patterns in when they show up.</p>
+    </div>
+    <a id="openSheetBtn" href="#" target="_blank" rel="noopener" style="text-decoration:none;">
+      <button type="button" class="secondary" style="margin-top:2px;">Open Google Sheet ↗</button>
+    </a>
   </header>
 
   <div class="tabs">
     <button class="tab-btn active" data-tab="pasteTab">Paste Trips</button>
     <button class="tab-btn" data-tab="patternsTab">Patterns</button>
     <button class="tab-btn" data-tab="regionsTab">Regions</button>
-  </div>
-
-  <div class="panel">
-    <h2>Apps Script Web App URL</h2>
-    <label for="scriptUrl">Used for both sending and reading data. Saved on this device.</label>
-    <input type="text" id="scriptUrl" placeholder="https://script.google.com/macros/s/AKfycb.../exec" value="https://script.google.com/macros/s/AKfycbxlyXXFnDjv-5D3bwofQZoGYVteaNqIV6kVTobBn2IxAYggsd4EgRbMtruEqKyFQKNBOg/exec">
   </div>
 
   <div id="pasteTab" class="tab-panel active">
@@ -222,7 +235,7 @@
         2. Delete any placeholder code and paste in the script shown below the tool (written out separately).<br>
         3. Click <code>Deploy → New deployment</code>, choose type <code>Web app</code>.<br>
         4. Set "Execute as" to <b>Me</b>, and "Who has access" to <b>Anyone</b>.<br>
-        5. Click <code>Deploy</code>, authorize it, then copy the <code>/exec</code> URL it gives you into the field above.<br>
+        5. Click <code>Deploy</code>, authorize it, then copy the <code>/exec</code> URL it gives you — send it over and I'll wire it into the tool (it's hardcoded now rather than a field you fill in).<br>
         A sheet tab called <b>Trips</b> will be created automatically the first time you send data, with a Route
         column already computed so you can sort/filter it directly in Sheets.
       </div>
@@ -243,14 +256,21 @@
       <h2>Pick a route</h2>
       <div class="row" style="margin-top:0;">
         <div style="flex:1;min-width:180px;">
-          <label for="originSelect">Starting point</label>
-          <select id="originSelect"></select>
+          <label for="originInput">Starting point</label>
+          <div class="input-wrapper">
+            <input type="text" id="originInput" placeholder="e.g. MHG9" autocomplete="off">
+            <div id="dropdown-originInput" class="autocomplete-suggestions"></div>
+          </div>
         </div>
         <div style="flex:1;min-width:180px;">
-          <label for="destSelect">Destination</label>
-          <select id="destSelect"></select>
+          <label for="destInput">Destination</label>
+          <div class="input-wrapper">
+            <input type="text" id="destInput" placeholder="e.g. DNX3" autocomplete="off">
+            <div id="dropdown-destInput" class="autocomplete-suggestions"></div>
+          </div>
         </div>
       </div>
+      <p class="hint" style="margin-top:6px;">Type a code or city — <code>Tab</code> cycles suggestions, <code>Enter</code> confirms and jumps to the next field, or just click one.</p>
 
       <div class="range-btns" style="margin-top:16px;">
         <button class="range-btn" data-days="14">2 weeks</button>
@@ -305,8 +325,15 @@ let currentOrigin = '';
 let currentDest = '';
 let currentRangeDays = 28;
 
+// Fixed endpoint - no longer user-editable in the UI. Update this if you ever
+// redeploy the Apps Script to a new URL.
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxlyXXFnDjv-5D3bwofQZoGYVteaNqIV6kVTobBn2IxAYggsd4EgRbMtruEqKyFQKNBOg/exec';
+
+// TODO: paste the actual Google Sheet URL here once you send it over
+const SHEET_URL = '#';
+document.getElementById('openSheetBtn').href = SHEET_URL;
+
 const els = {
-  scriptUrl: document.getElementById('scriptUrl'),
   rawInput: document.getElementById('rawInput'),
   parseBtn: document.getElementById('parseBtn'),
   sendBtn: document.getElementById('sendBtn'),
@@ -318,8 +345,8 @@ const els = {
   patternsStatus: document.getElementById('patternsStatus'),
   patternsCount: document.getElementById('patternsCount'),
   patternsPanel: document.getElementById('patternsPanel'),
-  originSelect: document.getElementById('originSelect'),
-  destSelect: document.getElementById('destSelect'),
+  originInput: document.getElementById('originInput'),
+  destInput: document.getElementById('destInput'),
   laneStats: document.getElementById('laneStats'),
   chartWrap: document.getElementById('chartWrap'),
   occurrenceTable: document.getElementById('occurrenceTable'),
@@ -348,26 +375,6 @@ function showStatus(el, msg, type){
   el.textContent = msg;
   el.className = 'status show ' + (type || 'info');
 }
-
-// ---------- saved URL ----------
-async function loadSavedUrl(){
-  try{
-    const res = await window.storage.get('apps-script-url', false);
-    if(res && res.value) els.scriptUrl.value = res.value;
-    else await saveUrl(els.scriptUrl.value.trim());
-  }catch(e){
-    try{ await saveUrl(els.scriptUrl.value.trim()); }catch(e2){}
-  }
-}
-async function saveUrl(url){
-  try{ await window.storage.set('apps-script-url', url, false); }catch(e){ console.error(e); }
-}
-loadSavedUrl();
-
-els.scriptUrl.addEventListener('change', () => {
-  const v = els.scriptUrl.value.trim();
-  if(v) saveUrl(v);
-});
 
 // ---------- parsing ----------
 function parseNumber(str){
@@ -552,11 +559,7 @@ els.parseBtn.addEventListener('click', () => {
 });
 
 els.sendBtn.addEventListener('click', async () => {
-  const url = els.scriptUrl.value.trim();
-  if(!url){
-    showStatus(els.status, 'Paste your Apps Script web app URL above first.', 'err');
-    return;
-  }
+  const url = SCRIPT_URL;
   if(parsedRows.length === 0){
     showStatus(els.status, 'Nothing parsed yet — click Parse first.', 'err');
     return;
@@ -577,7 +580,7 @@ els.sendBtn.addEventListener('click', async () => {
       showStatus(els.status, 'Sent — check your sheet to confirm it landed.', 'ok');
     }
   }catch(e){
-    showStatus(els.status, 'Could not reach the script. Double check the URL and that the deployment access is set to "Anyone". Error: ' + e.message, 'err');
+    showStatus(els.status, 'Could not reach the script. Error: ' + e.message, 'err');
   }
   els.sendBtn.disabled = false;
 });
@@ -618,11 +621,7 @@ els.loadRegionsBtn.addEventListener('click', async () => {
 });
 
 async function fetchAllTrips(statusEl){
-  const url = els.scriptUrl.value.trim();
-  if(!url){
-    showStatus(statusEl, 'Paste your Apps Script web app URL above first.', 'err');
-    return false;
-  }
+  const url = SCRIPT_URL;
   showStatus(statusEl, 'Loading data from your sheet...', 'info');
   try{
     const res = await fetch(url + (url.includes('?') ? '&' : '?') + 'action=list');
@@ -647,6 +646,9 @@ async function fetchAllTrips(statusEl){
   }
 }
 
+let originList = []; // [{code, city, count}], rebuilt whenever data loads
+let destList = [];
+
 function populateOriginDestSelects(){
   const origins = {}, dests = {};
   allTrips.forEach(t => {
@@ -659,33 +661,128 @@ function populateOriginDestSelects(){
       dests[t._dest].count++;
     }
   });
-  const originCodes = Object.keys(origins).sort((a,b) => origins[b].count - origins[a].count);
-  const destCodes = Object.keys(dests).sort((a,b) => dests[b].count - dests[a].count);
+  originList = Object.keys(origins).sort((a,b) => origins[b].count - origins[a].count)
+    .map(code => ({code, city: origins[code].city, count: origins[code].count}));
+  destList = Object.keys(dests).sort((a,b) => dests[b].count - dests[a].count)
+    .map(code => ({code, city: dests[code].city, count: dests[code].count}));
 
-  els.originSelect.innerHTML = originCodes.map(code =>
-    `<option value="${escapeHtml(code)}">${escapeHtml(code)} — ${escapeHtml(origins[code].city)} (${origins[code].count}x)</option>`
-  ).join('');
-  els.destSelect.innerHTML = destCodes.map(code =>
-    `<option value="${escapeHtml(code)}">${escapeHtml(code)} — ${escapeHtml(dests[code].city)} (${dests[code].count}x)</option>`
-  ).join('');
-
-  if(originCodes.length && destCodes.length){
-    currentOrigin = originCodes[0];
+  if(originList.length && destList.length){
+    currentOrigin = originList[0].code;
     // prefer a destination this origin has actually shipped to, if one exists
     const matchingDest = allTrips.find(t => t._origin === currentOrigin);
-    currentDest = matchingDest ? matchingDest._dest : destCodes[0];
-    els.originSelect.value = currentOrigin;
-    els.destSelect.value = currentDest;
+    currentDest = matchingDest ? matchingDest._dest : destList[0].code;
+    els.originInput.value = currentOrigin;
+    els.destInput.value = currentDest;
     renderRoute();
   }
 }
 
-els.originSelect.addEventListener('change', () => {
-  currentOrigin = els.originSelect.value;
+// generic type-ahead: getList() returns the current [{code, city, count}] array,
+// onPick(code) fires whenever a value is confirmed (click, Tab, or Enter)
+function setupAutocomplete(inputId, dropdownId, getList, onPick, nextInputId){
+  const input = document.getElementById(inputId);
+  const dropdown = document.getElementById(dropdownId);
+  let matches = [];
+  let activeIndex = -1;
+
+  function renderDropdown(){
+    dropdown.innerHTML = matches.map((m, i) =>
+      `<div class="autocomplete-suggestion${i===activeIndex?' active':''}" data-code="${escapeHtml(m.code)}">` +
+        `<span><strong>${escapeHtml(m.code)}</strong></span><span class="sub-info">${escapeHtml(m.city)} · ${m.count} trip${m.count===1?'':'s'}</span>` +
+      `</div>`
+    ).join('');
+    dropdown.querySelectorAll('.autocomplete-suggestion').forEach((el, i) => {
+      el.addEventListener('click', () => selectMatch(matches[i].code));
+    });
+    dropdown.style.display = matches.length ? 'block' : 'none';
+  }
+
+  function focusNext(){
+    if(nextInputId) document.getElementById(nextInputId).focus();
+  }
+
+  function selectMatch(code, advance){
+    input.value = code;
+    dropdown.style.display = 'none';
+    matches = [];
+    activeIndex = -1;
+    onPick(code);
+    if(advance) focusNext();
+  }
+
+  input.addEventListener('input', () => {
+    const val = input.value.trim().toUpperCase();
+    activeIndex = -1;
+    if(!val){ matches = []; dropdown.style.display = 'none'; return; }
+    const list = getList();
+    matches = list.filter(m => m.code.startsWith(val) || m.city.toUpperCase().includes(val))
+      .sort((a,b) => {
+        const aRank = a.code.startsWith(val) ? 0 : 1;
+        const bRank = b.code.startsWith(val) ? 0 : 1;
+        return aRank !== bRank ? aRank - bRank : b.count - a.count;
+      })
+      .slice(0, 12);
+    renderDropdown();
+  });
+
+  input.addEventListener('keydown', (e) => {
+    const open = dropdown.style.display === 'block' && matches.length > 0;
+    if(e.key === 'ArrowDown' && open){
+      e.preventDefault();
+      activeIndex = (activeIndex + 1) % matches.length;
+      renderDropdown();
+      return;
+    }
+    if(e.key === 'ArrowUp' && open){
+      e.preventDefault();
+      activeIndex = (activeIndex - 1 + matches.length) % matches.length;
+      renderDropdown();
+      return;
+    }
+    if(e.key === 'Tab' && open){
+      e.preventDefault();
+      activeIndex = e.shiftKey
+        ? (activeIndex - 1 + matches.length) % matches.length
+        : (activeIndex + 1) % matches.length;
+      input.value = matches[activeIndex].code;
+      renderDropdown();
+      onPick(matches[activeIndex].code);
+      return;
+    }
+    if(e.key === 'Enter'){
+      e.preventDefault();
+      if(open){
+        selectMatch(matches[activeIndex >= 0 ? activeIndex : 0].code, true);
+      } else {
+        onPick(input.value.trim().toUpperCase());
+        focusNext();
+      }
+      return;
+    }
+    if(e.key === 'Escape'){
+      dropdown.style.display = 'none';
+    }
+  });
+
+  input.addEventListener('blur', () => {
+    // small delay so a click on a suggestion still registers before we close
+    setTimeout(() => {
+      dropdown.style.display = 'none';
+      onPick(input.value.trim().toUpperCase());
+    }, 150);
+  });
+
+  document.addEventListener('click', (e) => {
+    if(!input.contains(e.target) && !dropdown.contains(e.target)) dropdown.style.display = 'none';
+  });
+}
+
+setupAutocomplete('originInput', 'dropdown-originInput', () => originList, (code) => {
+  currentOrigin = code;
   renderRoute();
-});
-els.destSelect.addEventListener('change', () => {
-  currentDest = els.destSelect.value;
+}, 'destInput');
+setupAutocomplete('destInput', 'dropdown-destInput', () => destList, (code) => {
+  currentDest = code;
   renderRoute();
 });
 
