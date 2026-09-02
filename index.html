@@ -187,6 +187,7 @@
   <div class="tabs">
     <button class="tab-btn active" data-tab="pasteTab">Paste Trips</button>
     <button class="tab-btn" data-tab="patternsTab">Patterns</button>
+    <button class="tab-btn" data-tab="regionsTab">Regions</button>
   </div>
 
   <div class="panel">
@@ -222,7 +223,7 @@
         3. Click <code>Deploy → New deployment</code>, choose type <code>Web app</code>.<br>
         4. Set "Execute as" to <b>Me</b>, and "Who has access" to <b>Anyone</b>.<br>
         5. Click <code>Deploy</code>, authorize it, then copy the <code>/exec</code> URL it gives you into the field above.<br>
-        A sheet tab called <b>Trips</b> will be created automatically the first time you send data, with a Lane and Route
+        A sheet tab called <b>Trips</b> will be created automatically the first time you send data, with a Route
         column already computed so you can sort/filter it directly in Sheets.
       </div>
     </div>
@@ -266,6 +267,35 @@
       </div>
     </div>
   </div>
+
+  <div id="regionsTab" class="tab-panel">
+    <div class="panel">
+      <h2>Load your data</h2>
+      <div class="row">
+        <button id="loadRegionsBtn">Load from Sheet</button>
+        <span class="count" id="regionsCount"></span>
+      </div>
+      <div class="status" id="regionsStatus"></div>
+    </div>
+
+    <div class="panel" id="regionsPanel" style="display:none;">
+      <h2>Price by country</h2>
+      <div class="range-btns">
+        <button class="range-btn region-mode-btn active" data-mode="pickup">Origin country</button>
+        <button class="range-btn region-mode-btn" data-mode="dropoff">Destination country</button>
+      </div>
+      <p class="hint" style="margin-top:0;">Ranked by average price/km, highest first. Click a country to see when its prices run high or low.</p>
+      <div id="regionChartWrap"></div>
+      <div class="table-scroll" style="margin-top:16px;">
+        <table id="regionTable"></table>
+      </div>
+    </div>
+
+    <div class="panel" id="regionDrilldownPanel" style="display:none;">
+      <h2 id="regionDrilldownTitle">By day of week</h2>
+      <div id="regionDayChartWrap"></div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -293,6 +323,15 @@ const els = {
   laneStats: document.getElementById('laneStats'),
   chartWrap: document.getElementById('chartWrap'),
   occurrenceTable: document.getElementById('occurrenceTable'),
+  loadRegionsBtn: document.getElementById('loadRegionsBtn'),
+  regionsStatus: document.getElementById('regionsStatus'),
+  regionsCount: document.getElementById('regionsCount'),
+  regionsPanel: document.getElementById('regionsPanel'),
+  regionChartWrap: document.getElementById('regionChartWrap'),
+  regionTable: document.getElementById('regionTable'),
+  regionDrilldownPanel: document.getElementById('regionDrilldownPanel'),
+  regionDrilldownTitle: document.getElementById('regionDrilldownTitle'),
+  regionDayChartWrap: document.getElementById('regionDayChartWrap'),
 };
 
 // ---------- tabs ----------
@@ -560,15 +599,31 @@ function parseRelayDateTime(str){
   return d;
 }
 
-els.loadPatternsBtn.addEventListener('click', loadPatternsData);
+els.loadPatternsBtn.addEventListener('click', async () => {
+  const ok = await fetchAllTrips(els.patternsStatus);
+  if(ok){
+    els.patternsCount.textContent = `${allTrips.length} total rows`;
+    populateOriginDestSelects();
+    els.patternsPanel.style.display = allTrips.length ? 'block' : 'none';
+  }
+});
 
-async function loadPatternsData(){
+els.loadRegionsBtn.addEventListener('click', async () => {
+  const ok = await fetchAllTrips(els.regionsStatus);
+  if(ok){
+    els.regionsCount.textContent = `${allTrips.length} total rows`;
+    renderRegionTable();
+    els.regionsPanel.style.display = allTrips.length ? 'block' : 'none';
+  }
+});
+
+async function fetchAllTrips(statusEl){
   const url = els.scriptUrl.value.trim();
   if(!url){
-    showStatus(els.patternsStatus, 'Paste your Apps Script web app URL above first.', 'err');
-    return;
+    showStatus(statusEl, 'Paste your Apps Script web app URL above first.', 'err');
+    return false;
   }
-  showStatus(els.patternsStatus, 'Loading data from your sheet...', 'info');
+  showStatus(statusEl, 'Loading data from your sheet...', 'info');
   try{
     const res = await fetch(url + (url.includes('?') ? '&' : '?') + 'action=list');
     const data = await res.json();
@@ -584,12 +639,11 @@ async function loadPatternsData(){
       obj._pickupDate = parseRelayDateTime(obj['Pickup Time']);
       return obj;
     });
-    showStatus(els.patternsStatus, `Loaded ${allTrips.length} logged trip(s).`, 'ok');
-    els.patternsCount.textContent = `${allTrips.length} total rows`;
-    populateOriginDestSelects();
-    els.patternsPanel.style.display = allTrips.length ? 'block' : 'none';
+    showStatus(statusEl, `Loaded ${allTrips.length} logged trip(s).`, 'ok');
+    return true;
   }catch(e){
-    showStatus(els.patternsStatus, 'Could not load data: ' + e.message, 'err');
+    showStatus(statusEl, 'Could not load data: ' + e.message, 'err');
+    return false;
   }
 }
 
@@ -749,6 +803,179 @@ function renderOccurrenceTable(occurrences){
     '</tr>';
   });
   els.occurrenceTable.innerHTML = html;
+}
+
+// ---------- Regions tab ----------
+
+let regionMode = 'pickup'; // 'pickup' or 'dropoff'
+
+// Relay's "Region" field is really a mix of granularities - sometimes a
+// country's top-level state/province (Bavaria, Catalonia), sometimes a
+// smaller department or county within it (Pas-de-Calais, Modena, Barcelona).
+// This maps the ones we've seen to their country so the Regions tab can
+// group by country instead. Anything not in here falls back to showing the
+// raw region text as its own bucket, so nothing gets silently dropped -
+// if you spot an unmapped one, tell me and I'll add it.
+const REGION_TO_COUNTRY = {
+  // Germany
+  'bavaria':'Germany','bayern':'Germany','baden-württemberg':'Germany','baden-wurttemberg':'Germany',
+  'north rhine-westphalia':'Germany','nordrhein-westfalen':'Germany','rhineland-palatinate':'Germany',
+  'rheinland-pfalz':'Germany','hesse':'Germany','hessen':'Germany','lower saxony':'Germany',
+  'niedersachsen':'Germany','saxony':'Germany','sachsen':'Germany','saxony-anhalt':'Germany',
+  'sachsen-anhalt':'Germany','thuringia':'Germany','thüringen':'Germany','brandenburg':'Germany',
+  'mecklenburg-vorpommern':'Germany','mecklenburg-western pomerania':'Germany',
+  'schleswig-holstein':'Germany','saarland':'Germany','bremen':'Germany','hamburg':'Germany','berlin':'Germany',
+  // France (regions + the departments we've seen used as "Region")
+  'île-de-france':'France','ile-de-france':'France','auvergne-rhône-alpes':'France','ara':'France',
+  'nouvelle-aquitaine':'France','occitanie':'France','hauts-de-france':'France','grand est':'France',
+  'pays de la loire':'France','bretagne':'France','brittany':'France','normandie':'France','normandy':'France',
+  'bourgogne-franche-comté':'France','centre-val de loire':'France',
+  "provence-alpes-côte d'azur":'France','paca':'France','corse':'France','corsica':'France',
+  'pas-de-calais':'France','val d\'oise':'France',"val d’oise":'France','pyrénées-atlantiques':'France',
+  'pyrenees-atlantiques':'France',
+  // Italy (regions + the provinces we've seen used as "Region")
+  'piedmont':'Italy','piemonte':'Italy','marche':'Italy','veneto':'Italy','lombardy':'Italy',
+  'lombardia':'Italy','emilia-romagna':'Italy','tuscany':'Italy','toscana':'Italy','lazio':'Italy',
+  'campania':'Italy','sicily':'Italy','sicilia':'Italy','puglia':'Italy','calabria':'Italy',
+  'sardinia':'Italy','sardegna':'Italy','liguria':'Italy','umbria':'Italy','abruzzo':'Italy',
+  'trentino-alto adige':'Italy','friuli-venezia giulia':'Italy','molise':'Italy','basilicata':'Italy',
+  "valle d'aosta":'Italy','modena':'Italy','bergamo':'Italy','novara':'Italy','verbano-cusio-ossola':'Italy',
+  // Spain (autonomous communities + provinces we've seen used as "Region")
+  'catalonia':'Spain','cataluña':'Spain','madrid':'Spain','andalusia':'Spain','andalucía':'Spain',
+  'valencia':'Spain','galicia':'Spain','castilla y león':'Spain','castilla-la mancha':'Spain',
+  'basque country':'Spain','país vasco':'Spain','aragón':'Spain','aragon':'Spain','murcia':'Spain',
+  'extremadura':'Spain','canarias':'Spain','baleares':'Spain','asturias':'Spain','cantabria':'Spain',
+  'navarra':'Spain','la rioja':'Spain','barcelona':'Spain','toledo':'Spain',
+  // Slovakia, Czechia
+  'trnava':'Slovakia','bratislava':'Slovakia','košice':'Slovakia','nitra':'Slovakia','žilina':'Slovakia',
+  'banská bystrica':'Slovakia','prešov':'Slovakia',
+  'olomouc':'Czechia','praha':'Czechia','prague':'Czechia','brno':'Czechia','ostrava':'Czechia','plzeň':'Czechia',
+  // Ireland
+  'leinster':'Ireland','munster':'Ireland','connacht':'Ireland','ulster':'Ireland','dublin':'Ireland',
+  // Austria
+  'vienna':'Austria','wien':'Austria','niederösterreich':'Austria','oberösterreich':'Austria',
+  'steiermark':'Austria','tirol':'Austria','salzburg':'Austria','kärnten':'Austria','vorarlberg':'Austria',
+  'burgenland':'Austria',
+  // Poland
+  'wojewodztwo śląskie':'Poland','śląskie':'Poland','mazowieckie':'Poland','malopolskie':'Poland',
+  'małopolskie':'Poland','wielkopolskie':'Poland','dolnośląskie':'Poland',
+  // UK / Netherlands / Belgium (common ones)
+  'england':'United Kingdom','scotland':'United Kingdom','wales':'United Kingdom','northern ireland':'United Kingdom',
+  'north holland':'Netherlands','south holland':'Netherlands','flanders':'Belgium','wallonia':'Belgium',
+};
+
+function countryFor(region){
+  if(!region) return 'Unknown';
+  const key = region.trim().toLowerCase();
+  return REGION_TO_COUNTRY[key] || region; // unmapped: show the raw region text as its own bucket
+}
+
+document.querySelectorAll('.region-mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.region-mode-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    regionMode = btn.dataset.mode;
+    els.regionDrilldownPanel.style.display = 'none';
+    renderRegionTable();
+  });
+});
+
+function regionStats(){
+  const field = regionMode === 'pickup' ? 'Pickup Region' : 'Dropoff Region';
+  const stats = {};
+  allTrips.forEach(t => {
+    const country = countryFor(t[field]);
+    const price = parseFloat(t['Price (EUR)']);
+    const perKm = parseFloat(t['Price/km (EUR)']);
+    if(isNaN(price) && isNaN(perKm)) return;
+    if(!stats[country]) stats[country] = {count:0, sumPrice:0, sumPerKm:0, perKmCount:0, minPerKm:Infinity, maxPerKm:-Infinity};
+    stats[country].count++;
+    if(!isNaN(price)) stats[country].sumPrice += price;
+    if(!isNaN(perKm)){
+      stats[country].sumPerKm += perKm;
+      stats[country].perKmCount++;
+      stats[country].minPerKm = Math.min(stats[country].minPerKm, perKm);
+      stats[country].maxPerKm = Math.max(stats[country].maxPerKm, perKm);
+    }
+  });
+  return stats;
+}
+
+function renderRegionTable(){
+  const stats = regionStats();
+  const countries = Object.keys(stats)
+    .filter(c => stats[c].perKmCount > 0)
+    .sort((a,b) => (stats[b].sumPerKm/stats[b].perKmCount) - (stats[a].sumPerKm/stats[a].perKmCount));
+
+  const top = countries.slice(0, 10);
+  renderBarChart(els.regionChartWrap,
+    top.map(c => c),
+    top.map(c => stats[c].sumPerKm / stats[c].perKmCount));
+
+  let html = '<tr><th>Country</th><th>Trips</th><th>Avg Price</th><th>Avg €/km</th><th>Min €/km</th><th>Max €/km</th></tr>';
+  countries.forEach(c => {
+    const s = stats[c];
+    const avgPrice = s.count ? (s.sumPrice / s.count).toFixed(0) : '—';
+    const avgPerKm = (s.sumPerKm / s.perKmCount).toFixed(2);
+    html += `<tr data-country="${escapeHtml(c)}" style="cursor:pointer;">` +
+      `<td>${escapeHtml(c)}</td><td>${s.count}</td><td>€${avgPrice}</td><td>€${avgPerKm}</td>` +
+      `<td>€${isFinite(s.minPerKm)?s.minPerKm.toFixed(2):'—'}</td><td>€${isFinite(s.maxPerKm)?s.maxPerKm.toFixed(2):'—'}</td></tr>`;
+  });
+  els.regionTable.innerHTML = html;
+
+  els.regionTable.querySelectorAll('tr[data-country]').forEach(row => {
+    row.addEventListener('click', () => renderRegionDrilldown(row.dataset.country));
+  });
+}
+
+function renderRegionDrilldown(country){
+  const field = regionMode === 'pickup' ? 'Pickup Region' : 'Dropoff Region';
+  const trips = allTrips.filter(t => countryFor(t[field]) === country && t._pickupDate);
+  const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const sums = new Array(7).fill(0), counts = new Array(7).fill(0);
+  trips.forEach(t => {
+    const perKm = parseFloat(t['Price/km (EUR)']);
+    if(isNaN(perKm)) return;
+    const day = t._pickupDate.getDay();
+    sums[day] += perKm;
+    counts[day]++;
+  });
+  const avgs = sums.map((s,i) => counts[i] ? s/counts[i] : 0);
+
+  els.regionDrilldownTitle.textContent = `${country} — avg €/km by day of week (${trips.length} trip${trips.length===1?'':'s'})`;
+  renderBarChart(els.regionDayChartWrap, dayNames, avgs, counts);
+  els.regionDrilldownPanel.style.display = 'block';
+}
+
+// generic small bar chart, reused for the country ranking and the day-of-week drilldown
+function renderBarChart(container, labels, values, counts){
+  if(labels.length === 0){
+    container.innerHTML = '<p class="hint">Not enough data yet.</p>';
+    return;
+  }
+  const w = 880, h = 200, padL = 50, padB = 34, padT = 10;
+  const plotW = w - padL - 10, plotH = h - padT - padB;
+  const maxVal = Math.max(...values, 0.01);
+  const slot = plotW / labels.length;
+  const barW = Math.max(18, Math.min(60, slot * 0.6));
+
+  let svg = `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;">`;
+  for(let i = 0; i <= 4; i++){
+    const val = maxVal * i / 4;
+    const yy = padT + plotH - (val / maxVal) * plotH;
+    svg += `<line class="grid-line" x1="${padL}" y1="${yy}" x2="${w-10}" y2="${yy}"/>`;
+    svg += `<text x="${padL-8}" y="${yy+4}" font-size="10" text-anchor="end">€${val.toFixed(2)}</text>`;
+  }
+  labels.forEach((label, i) => {
+    const barH = (values[i] / maxVal) * plotH;
+    const x = padL + i * slot + (slot - barW) / 2;
+    const y = padT + plotH - barH;
+    const title = counts ? `${label}: €${values[i].toFixed(2)}/km (${counts[i]} trip${counts[i]===1?'':'s'})` : `${label}: €${values[i].toFixed(2)}/km`;
+    svg += `<rect class="dot" x="${x}" y="${y}" width="${barW}" height="${Math.max(barH,1)}" rx="3"><title>${escapeHtml(title)}</title></rect>`;
+    svg += `<text x="${x + barW/2}" y="${h-padB+16}" font-size="10" text-anchor="middle">${escapeHtml(String(label))}</text>`;
+  });
+  svg += '</svg>';
+  container.innerHTML = svg;
 }
 </script>
 </body>
