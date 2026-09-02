@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Predict Trips — Paste Loader</title>
+<style>
+  :root{
+    --page-bg:#dde4ec;
+    --panel:#171b28;
+    --panel-header:#11141e;
+    --panel-alt:#1e2333;
+    --input-bg:#262b3d;
+    --text:#eef0f6;
+    --muted:#9aa1b8;
+    --border:rgba(255,255,255,0.08);
+    --accent:#6d72e0;
+    --accent-dark:#5457c4;
+    --red:#e5432c;
+    --red-dark:#c93620;
+    --green:#3ecf8e;
+    --green-bg:rgba(62,207,142,0.14);
+    --red-bg:rgba(229,67,44,0.14);
+    --radius-lg:14px;
+    --radius-md:10px;
+    --radius-sm:7px;
+    --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, Helvetica, Arial, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--page-bg);
+    color:var(--text);
+    font-family:var(--font);
+    padding:32px 20px 80px;
+  }
+  .wrap{max-width:960px;margin:0 auto;}
+  header{margin-bottom:20px;}
+  header h1{
+    font-size:26px;
+    margin:0 0 4px;
+    letter-spacing:-0.2px;
+    font-weight:800;
+    color:#1a1e2b;
+  }
+  header p{margin:0;color:#4d5568;font-size:14px;}
+
+  .tabs{display:flex;gap:8px;margin-bottom:20px;}
+  .tab-btn{
+    font-family:var(--font);
+    font-size:13px;font-weight:700;letter-spacing:0.2px;
+    padding:9px 18px;border-radius:999px;
+    border:1px solid transparent;
+    background:#c9d2dd;color:#4d5568;cursor:pointer;
+  }
+  .tab-btn.active{background:var(--panel-header);color:#fff;}
+  .tab-panel{display:none;}
+  .tab-panel.active{display:block;}
+
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:var(--radius-lg);
+    padding:20px;
+    margin-bottom:20px;
+    box-shadow:0 8px 24px rgba(15,18,30,0.18);
+  }
+  .panel h2{
+    font-size:12px;
+    text-transform:uppercase;
+    letter-spacing:0.6px;
+    margin:0 0 14px;
+    color:#fff;
+    font-family:var(--font);
+    font-weight:800;
+  }
+  label{
+    display:block;
+    font-family:var(--font);
+    font-size:12px;
+    color:var(--muted);
+    margin-bottom:6px;
+    font-weight:600;
+  }
+  input[type=text], select{
+    width:100%;
+    padding:11px 13px;
+    border:1px solid var(--border);
+    border-radius:var(--radius-sm);
+    font-family:var(--font);
+    font-size:13.5px;
+    background:var(--input-bg);
+    color:var(--text);
+  }
+  input[type=text]::placeholder{color:#6b7288;}
+  input[type=text]:focus, select:focus{outline:2px solid var(--accent);outline-offset:1px;}
+  select{appearance:none;-webkit-appearance:none;}
+  .hint{font-family:var(--font);font-size:12.5px;color:var(--muted);margin-top:8px;line-height:1.6;}
+  .hint code{background:var(--input-bg);color:#c7cce0;padding:2px 6px;border-radius:4px;font-size:11.5px;}
+
+  textarea{
+    width:100%;
+    min-height:220px;
+    padding:14px;
+    border:1px solid var(--border);
+    border-radius:var(--radius-sm);
+    font-family:'SF Mono',Menlo,Consolas,monospace;
+    font-size:12.5px;
+    line-height:1.5;
+    background:var(--input-bg);
+    color:var(--text);
+    resize:vertical;
+  }
+  textarea::placeholder{color:#6b7288;}
+  textarea:focus{outline:2px solid var(--accent);outline-offset:1px;}
+
+  .row{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;align-items:center;}
+  button{
+    font-family:var(--font);
+    font-size:13.5px;
+    font-weight:700;
+    padding:11px 20px;
+    border-radius:var(--radius-sm);
+    border:1px solid transparent;
+    background:var(--accent);
+    color:#fff;
+    cursor:pointer;
+  }
+  button:hover{background:var(--accent-dark);}
+  button.secondary{
+    background:transparent;
+    border-color:var(--border);
+    color:var(--text);
+  }
+  button.secondary:hover{background:var(--panel-alt);}
+  button:disabled{opacity:1;cursor:not-allowed;background:#3a3f52;border-color:transparent;color:#7a8098;}
+
+  .status{font-family:var(--font);font-size:13px;margin-top:12px;padding:11px 13px;border-radius:var(--radius-sm);display:none;}
+  .status.show{display:block;}
+  .status.ok{background:var(--green-bg);color:var(--green);border:1px solid rgba(62,207,142,0.3);}
+  .status.err{background:var(--red-bg);color:#ff8069;border:1px solid rgba(229,67,44,0.35);}
+  .status.info{background:var(--panel-alt);color:var(--muted);border:1px solid var(--border);}
+
+  table{width:100%;border-collapse:collapse;font-family:var(--font);font-size:12px;margin-top:14px;}
+  th,td{border-bottom:1px solid var(--border);padding:8px 10px;text-align:left;white-space:nowrap;color:var(--text);}
+  th{background:var(--panel-header);color:#c7cce0;font-weight:700;font-size:10.5px;text-transform:uppercase;letter-spacing:0.4px;position:sticky;top:0;}
+  tr:nth-child(even) td{background:rgba(255,255,255,0.02);}
+  .table-scroll{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-md);}
+  .count{font-family:var(--font);font-size:13px;color:var(--muted);}
+
+  .badge{
+    display:inline-block;font-size:10px;font-weight:800;letter-spacing:0.3px;
+    text-transform:uppercase;padding:2px 9px;border-radius:999px;
+    background:var(--red);color:#fff;
+  }
+  .badge.purple{background:var(--accent);}
+
+  .stat-row{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px;}
+  .stat-box{
+    background:var(--panel-alt);border:1px solid var(--border);border-radius:var(--radius-md);
+    padding:12px 18px;font-family:var(--font);
+  }
+  .stat-box .num{font-size:20px;font-weight:800;color:#fff;}
+  .stat-box .lbl{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;font-weight:700;}
+
+  .range-btns{display:flex;gap:6px;margin-bottom:14px;}
+  .range-btn{
+    font-family:var(--font);font-size:12px;font-weight:700;
+    padding:6px 14px;border-radius:999px;border:1px solid var(--border);
+    background:var(--panel-alt);color:var(--muted);cursor:pointer;
+  }
+  .range-btn.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+
+  svg text{font-family:var(--font);fill:var(--muted);}
+  .dot{fill:var(--red);opacity:0.9;}
+  .dot:hover{opacity:1;}
+  .axis-line{stroke:var(--border);stroke-width:1;}
+  .grid-line{stroke:var(--border);stroke-width:0.5;stroke-dasharray:2,3;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Predict Trips</h1>
+    <p>Paste Relay listings into your sheet, then spot the patterns in when they show up.</p>
+  </header>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="pasteTab">Paste Trips</button>
+    <button class="tab-btn" data-tab="patternsTab">Patterns</button>
+  </div>
+
+  <div class="panel">
+    <h2>Apps Script Web App URL</h2>
+    <label for="scriptUrl">Used for both sending and reading data. Saved on this device.</label>
+    <input type="text" id="scriptUrl" placeholder="https://script.google.com/macros/s/AKfycb.../exec" value="https://script.google.com/macros/s/AKfycbxlyXXFnDjv-5D3bwofQZoGYVteaNqIV6kVTobBn2IxAYggsd4EgRbMtruEqKyFQKNBOg/exec">
+  </div>
+
+  <div id="pasteTab" class="tab-panel active">
+    <div class="panel">
+      <h2>Paste trips</h2>
+      <textarea id="rawInput" placeholder="Paste the copied listing text here..."></textarea>
+      <div class="row">
+        <button id="parseBtn">Parse</button>
+        <button id="sendBtn" disabled>Send to Sheet</button>
+        <span class="count" id="countLabel"></span>
+      </div>
+      <div class="status" id="status"></div>
+    </div>
+
+    <div class="panel" id="previewPanel" style="display:none;">
+      <h2>Preview</h2>
+      <div class="table-scroll">
+        <table id="previewTable"></table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>One-time setup (Apps Script)</h2>
+      <div class="hint">
+        1. Open your spreadsheet → <code>Extensions → Apps Script</code>.<br>
+        2. Delete any placeholder code and paste in the script shown below the tool (written out separately).<br>
+        3. Click <code>Deploy → New deployment</code>, choose type <code>Web app</code>.<br>
+        4. Set "Execute as" to <b>Me</b>, and "Who has access" to <b>Anyone</b>.<br>
+        5. Click <code>Deploy</code>, authorize it, then copy the <code>/exec</code> URL it gives you into the field above.<br>
+        A sheet tab called <b>Trips</b> will be created automatically the first time you send data, with a Lane and Route
+        column already computed so you can sort/filter it directly in Sheets.
+      </div>
+    </div>
+  </div>
+
+  <div id="patternsTab" class="tab-panel">
+    <div class="panel">
+      <h2>Load your data</h2>
+      <div class="row">
+        <button id="loadPatternsBtn">Load from Sheet</button>
+        <span class="count" id="patternsCount"></span>
+      </div>
+      <div class="status" id="patternsStatus"></div>
+    </div>
+
+    <div class="panel" id="patternsPanel" style="display:none;">
+      <h2>Pick a route</h2>
+      <div class="row" style="margin-top:0;">
+        <div style="flex:1;min-width:180px;">
+          <label for="originSelect">Starting point</label>
+          <select id="originSelect"></select>
+        </div>
+        <div style="flex:1;min-width:180px;">
+          <label for="destSelect">Destination</label>
+          <select id="destSelect"></select>
+        </div>
+      </div>
+
+      <div class="range-btns" style="margin-top:16px;">
+        <button class="range-btn" data-days="14">2 weeks</button>
+        <button class="range-btn active" data-days="28">4 weeks</button>
+        <button class="range-btn" data-days="9999">All time</button>
+      </div>
+
+      <div class="stat-row" id="laneStats"></div>
+
+      <div id="chartWrap"></div>
+
+      <div class="table-scroll" style="margin-top:16px;">
+        <table id="occurrenceTable"></table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let parsedRows = [];
+let allTrips = [];       // rows loaded from the sheet for the Patterns tab
+let currentOrigin = '';
+let currentDest = '';
+let currentRangeDays = 28;
+
+const els = {
+  scriptUrl: document.getElementById('scriptUrl'),
+  rawInput: document.getElementById('rawInput'),
+  parseBtn: document.getElementById('parseBtn'),
+  sendBtn: document.getElementById('sendBtn'),
+  status: document.getElementById('status'),
+  countLabel: document.getElementById('countLabel'),
+  previewPanel: document.getElementById('previewPanel'),
+  previewTable: document.getElementById('previewTable'),
+  loadPatternsBtn: document.getElementById('loadPatternsBtn'),
+  patternsStatus: document.getElementById('patternsStatus'),
+  patternsCount: document.getElementById('patternsCount'),
+  patternsPanel: document.getElementById('patternsPanel'),
+  originSelect: document.getElementById('originSelect'),
+  destSelect: document.getElementById('destSelect'),
+  laneStats: document.getElementById('laneStats'),
+  chartWrap: document.getElementById('chartWrap'),
+  occurrenceTable: document.getElementById('occurrenceTable'),
+};
+
+// ---------- tabs ----------
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.tab).classList.add('active');
+  });
+});
+
+function showStatus(el, msg, type){
+  el.textContent = msg;
+  el.className = 'status show ' + (type || 'info');
+}
+
+// ---------- saved URL ----------
+async function loadSavedUrl(){
+  try{
+    const res = await window.storage.get('apps-script-url', false);
+    if(res && res.value) els.scriptUrl.value = res.value;
+    else await saveUrl(els.scriptUrl.value.trim());
+  }catch(e){
+    try{ await saveUrl(els.scriptUrl.value.trim()); }catch(e2){}
+  }
+}
+async function saveUrl(url){
+  try{ await window.storage.set('apps-script-url', url, false); }catch(e){ console.error(e); }
+}
+loadSavedUrl();
+
+els.scriptUrl.addEventListener('change', () => {
+  const v = els.scriptUrl.value.trim();
+  if(v) saveUrl(v);
+});
+
+// ---------- parsing ----------
+function parseNumber(str){
+  if(!str) return '';
+  const cleaned = str.replace(/[€,]/g, '');
+  const m = cleaned.match(/-?[\d.]+/);
+  return m ? m[0] : '';
+}
+
+function parseLocation(str){
+  // Standard case: "NUE1 GATTENDORF, Bavaria 95185" or "LIN8 CASIRATE D'ADDA, Bergamo 24040"
+  const m = str.match(/^([^\s,]+)\s+(.+?),\s*(.+?)\s+(\S+)$/);
+  if(m) return {code:m[1], city:m[2], region:m[3], zip:m[4]};
+
+  // Fallback: some locations have no facility code and Relay just repeats
+  // "City, Region" twice back to back, e.g. "KELHEIM, Bavaria KELHEIM, Bavaria"
+  const dup = str.match(/^(.+?),\s*(.+?)\s+\1,\s*\2$/);
+  if(dup) return {code:'', city:dup[1], region:dup[2], zip:''};
+
+  return {code:'', city:str, region:'', zip:''};
+}
+
+function parseTrips(text){
+  // normalize line endings and strip zero-width/invisible characters that can
+  // sneak in from copy-pasting off a web page
+  const clean = text
+    .replace(/\r\n|\r|\u2028|\u2029/g, '\n')
+    .replace(/[\u200B\u200C\u200D\uFEFF]/g, '');
+  const lines = clean.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  const records = [];
+  let i = 0;
+
+  while(i < lines.length){
+    // find start of a record. Usually the deadhead distance and the word
+    // "Deadhead" are glued together on one line ("114.11 kmDeadhead"), but
+    // depending on how the page renders, they can come through as two
+    // separate lines ("114.11 km" then "Deadhead"). Accept both.
+    const gluedDeadhead = /kmDeadhead/i.test(lines[i]);
+    const splitDeadhead = /^[\d.,]+\s*km$/i.test(lines[i]) && lines[i+1] && /^Deadhead$/i.test(lines[i+1]);
+    if(!gluedDeadhead && !splitDeadhead){ i++; continue; }
+
+    i++; // consume the km line - deadhead itself isn't tracked anymore
+    if(splitDeadhead) i++; // consume the separate "Deadhead" label line too
+
+    // stop marker is any bare number (1, 2, 3, 4...) - multi-stop trips can jump straight to the final stop number
+    if(/^\d+$/.test(lines[i])) i++;
+    const pickupRaw = lines[i++] || '';
+    const pickupTime = lines[i++] || '';
+    const pickup = parseLocation(pickupRaw);
+
+    const dropoffStopNum = /^\d+$/.test(lines[i]) ? lines[i++] : '';
+    const dropoffRaw = lines[i++] || '';
+    const dropoffTime = lines[i++] || '';
+    const dropoff = parseLocation(dropoffRaw);
+
+    const distDurLine = lines[i++] || '';
+    const distDurMatch = distDurLine.match(/^([\d.,]+)\s*km(.*)$/i);
+    const distanceKm = distDurMatch ? parseNumber(distDurMatch[1]) : '';
+    let duration = distDurMatch ? distDurMatch[2].trim() : '';
+    // sometimes the duration is on its own line instead of glued to the distance
+    const durationPattern = /^(?=.*\d)(?:\d+d\s*)?(?:\d+h\s*)?(?:\d+m\s*)?$/i;
+    if(!duration && lines[i] && durationPattern.test(lines[i])){
+      duration = lines[i++];
+    }
+
+    const trailerType = lines[i++] || '';
+    const routeCode = lines[i++] || '';
+
+    // between the route code and the price, there can be zero or more extra
+    // labels (e.g. "Unaccompanied") followed by the status (e.g. "Live"/"Drop").
+    const extras = [];
+    while(lines[i] && !/^€/.test(lines[i])){
+      extras.push(lines[i++]);
+    }
+    const status = extras.length ? extras[extras.length - 1] : '';
+    const notes = extras.slice(0, -1).join(', ');
+
+    const priceLine = lines[i++] || '';
+    const price = parseNumber(priceLine);
+    const priceTrend = /↑/.test(priceLine) ? 'up' : (/↓/.test(priceLine) ? 'down' : '');
+    const pricePerKm = parseNumber((lines[i] || '').replace('/km',''));
+    if(/€/.test(lines[i] || '')) i++;
+
+    let tag = '';
+    const nextIsGluedDeadhead = lines[i] && /kmDeadhead/i.test(lines[i]);
+    const nextIsSplitDeadhead = lines[i] && /^[\d.,]+\s*km$/i.test(lines[i]) && lines[i+1] && /^Deadhead$/i.test(lines[i+1]);
+    if(lines[i] && !nextIsGluedDeadhead && !nextIsSplitDeadhead){
+      tag = lines[i++];
+    }
+
+    const lane = (pickup.code || pickup.city) + '→' + (dropoff.code || dropoff.city);
+    const route = pickup.city + ' → ' + dropoff.city;
+    const drivers = driversNeeded(distanceKm, duration);
+
+    records.push({
+      lane, route, drivers,
+      pickupCode: pickup.code, pickupCity: pickup.city, pickupRegion: pickup.region,
+      pickupTime, dropoffStopNum, dropoffCode: dropoff.code, dropoffCity: dropoff.city,
+      dropoffRegion: dropoff.region, dropoffTime, distanceKm, duration,
+      trailerType, routeCode, notes, status, price, priceTrend, pricePerKm, tag
+    });
+  }
+  return records;
+}
+
+// ---------- 1 vs 2 drivers heuristic ----------
+// Rule of thumb from EU-style driving hours: a solo driver can drive up to
+// ~4.5h before a mandatory 45-min break, do that twice (~9h driving) or
+// stretch to two 5h legs (~10h driving), then needs a 9-11h rest before the
+// next drive block. This is an estimate for planning, not a legal HOS check.
+function parseDurationToHours(str){
+  if(!str) return 0;
+  const d = (str.match(/(\d+)\s*d/i) || [])[1];
+  const h = (str.match(/(\d+)\s*h/i) || [])[1];
+  const m = (str.match(/(\d+)\s*m/i) || [])[1];
+  return (d ? +d*24 : 0) + (h ? +h : 0) + (m ? +m/60 : 0);
+}
+
+function maxSoloDriveHours(windowHours){
+  const driveHoursPerCycle = 9.5;  // ~9-10h driving per drive+break block
+  const cycleLength = 20;          // that block plus a 9-11h rest, rounded
+  const fullCycles = Math.floor(windowHours / cycleLength);
+  const remainder = windowHours % cycleLength;
+  return fullCycles * driveHoursPerCycle + Math.min(remainder, driveHoursPerCycle);
+}
+
+function driversNeeded(distanceKm, durationStr){
+  const windowHours = parseDurationToHours(durationStr);
+  const dist = parseFloat(distanceKm);
+  if(!windowHours || !dist) return '';
+  const avgSpeedKmH = 75; // rough long-haul average including minor stops
+  const driveHoursNeeded = dist / avgSpeedKmH;
+  return driveHoursNeeded > maxSoloDriveHours(windowHours) ? '2' : '1';
+}
+
+function renderPreview(rows){
+  if(rows.length === 0){
+    els.previewPanel.style.display = 'none';
+    return;
+  }
+  const cols = ['pickupCode','dropoffCode','route','pickupTime','dropoffTime','distanceKm','duration',
+    'price','pricePerKm','drivers','routeCode','pickupCity','pickupRegion','dropoffCity','dropoffRegion',
+    'dropoffStopNum','trailerType','notes','status','tag'];
+  let html = '<tr>' + cols.map(c => `<th>${c}</th>`).join('') + '</tr>';
+  rows.forEach(r => {
+    html += '<tr>' + cols.map(c => {
+      if(!r[c]) return '<td></td>';
+      if(c === 'tag') return `<td><span class="badge">${escapeHtml(r[c])}</span></td>`;
+      if(c === 'routeCode') return `<td><span class="badge purple">${r[c]==='P'?'Provided':(r[c]==='R'?'Required':escapeHtml(r[c]))}</span></td>`;
+      return `<td>${escapeHtml(r[c])}</td>`;
+    }).join('') + '</tr>';
+  });
+  els.previewTable.innerHTML = html;
+  els.previewPanel.style.display = 'block';
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+els.parseBtn.addEventListener('click', () => {
+  try{
+    const text = els.rawInput.value;
+    if(!text.trim()){
+      showStatus(els.status, 'Paste some trip listings first.', 'err');
+      return;
+    }
+    parsedRows = parseTrips(text);
+    renderPreview(parsedRows);
+    if(parsedRows.length === 0){
+      showStatus(els.status, "Could not find any trips in that text — check the format matches Relay's listing view.", 'err');
+      els.sendBtn.disabled = true;
+    } else {
+      showStatus(els.status, `Parsed ${parsedRows.length} trip${parsedRows.length===1?'':'s'}. Review below, then send.`, 'ok');
+      els.sendBtn.disabled = false;
+    }
+    els.countLabel.textContent = parsedRows.length ? `${parsedRows.length} row(s) ready` : '';
+  }catch(err){
+    showStatus(els.status, 'Parse crashed with an error: ' + err.message + ' (open DevTools console for details)', 'err');
+    console.error(err);
+  }
+});
+
+els.sendBtn.addEventListener('click', async () => {
+  const url = els.scriptUrl.value.trim();
+  if(!url){
+    showStatus(els.status, 'Paste your Apps Script web app URL above first.', 'err');
+    return;
+  }
+  if(parsedRows.length === 0){
+    showStatus(els.status, 'Nothing parsed yet — click Parse first.', 'err');
+    return;
+  }
+  els.sendBtn.disabled = true;
+  showStatus(els.status, 'Sending to Google Sheets...', 'info');
+  try{
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {'Content-Type': 'text/plain;charset=utf-8'},
+      body: JSON.stringify({rows: parsedRows})
+    });
+    const data = await res.json().catch(() => null);
+    if(data && data.status === 'success'){
+      const dupeNote = data.skipped ? ` (${data.skipped} duplicate${data.skipped===1?'':'s'} skipped)` : '';
+      showStatus(els.status, `Added ${data.added} row(s) to the sheet.${dupeNote}`, 'ok');
+    } else {
+      showStatus(els.status, 'Sent — check your sheet to confirm it landed.', 'ok');
+    }
+  }catch(e){
+    showStatus(els.status, 'Could not reach the script. Double check the URL and that the deployment access is set to "Anyone". Error: ' + e.message, 'err');
+  }
+  els.sendBtn.disabled = false;
+});
+
+// ---------- Patterns tab ----------
+
+const MONTHS = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+
+function parseRelayDateTime(str){
+  if(!str) return null;
+  const m = String(str).match(/(\d{1,2})\s+([A-Za-z]{3})\s+(\d{1,2}):(\d{2})/);
+  if(!m) return null;
+  const day = +m[1], month = MONTHS[m[2]], hour = +m[3], minute = +m[4];
+  if(month === undefined) return null;
+  const now = new Date();
+  let year = now.getFullYear();
+  let d = new Date(year, month, day, hour, minute);
+  if(d - now > 1000*60*60*24*300) d = new Date(year - 1, month, day, hour, minute);
+  return d;
+}
+
+els.loadPatternsBtn.addEventListener('click', loadPatternsData);
+
+async function loadPatternsData(){
+  const url = els.scriptUrl.value.trim();
+  if(!url){
+    showStatus(els.patternsStatus, 'Paste your Apps Script web app URL above first.', 'err');
+    return;
+  }
+  showStatus(els.patternsStatus, 'Loading data from your sheet...', 'info');
+  try{
+    const res = await fetch(url + (url.includes('?') ? '&' : '?') + 'action=list');
+    const data = await res.json();
+    if(!data || data.status !== 'success'){
+      throw new Error((data && data.message) || 'Unexpected response');
+    }
+    const headers = data.headers;
+    allTrips = data.rows.map(row => {
+      const obj = {};
+      headers.forEach((h, idx) => obj[h] = row[idx]);
+      obj._origin = obj['Pickup Code'] || obj['Pickup City'] || '';
+      obj._dest = obj['Dropoff Code'] || obj['Dropoff City'] || '';
+      obj._pickupDate = parseRelayDateTime(obj['Pickup Time']);
+      return obj;
+    });
+    showStatus(els.patternsStatus, `Loaded ${allTrips.length} logged trip(s).`, 'ok');
+    els.patternsCount.textContent = `${allTrips.length} total rows`;
+    populateOriginDestSelects();
+    els.patternsPanel.style.display = allTrips.length ? 'block' : 'none';
+  }catch(e){
+    showStatus(els.patternsStatus, 'Could not load data: ' + e.message, 'err');
+  }
+}
+
+function populateOriginDestSelects(){
+  const origins = {}, dests = {};
+  allTrips.forEach(t => {
+    if(t._origin){
+      origins[t._origin] = origins[t._origin] || {count:0, city: t['Pickup City'] || t._origin};
+      origins[t._origin].count++;
+    }
+    if(t._dest){
+      dests[t._dest] = dests[t._dest] || {count:0, city: t['Dropoff City'] || t._dest};
+      dests[t._dest].count++;
+    }
+  });
+  const originCodes = Object.keys(origins).sort((a,b) => origins[b].count - origins[a].count);
+  const destCodes = Object.keys(dests).sort((a,b) => dests[b].count - dests[a].count);
+
+  els.originSelect.innerHTML = originCodes.map(code =>
+    `<option value="${escapeHtml(code)}">${escapeHtml(code)} — ${escapeHtml(origins[code].city)} (${origins[code].count}x)</option>`
+  ).join('');
+  els.destSelect.innerHTML = destCodes.map(code =>
+    `<option value="${escapeHtml(code)}">${escapeHtml(code)} — ${escapeHtml(dests[code].city)} (${dests[code].count}x)</option>`
+  ).join('');
+
+  if(originCodes.length && destCodes.length){
+    currentOrigin = originCodes[0];
+    // prefer a destination this origin has actually shipped to, if one exists
+    const matchingDest = allTrips.find(t => t._origin === currentOrigin);
+    currentDest = matchingDest ? matchingDest._dest : destCodes[0];
+    els.originSelect.value = currentOrigin;
+    els.destSelect.value = currentDest;
+    renderRoute();
+  }
+}
+
+els.originSelect.addEventListener('change', () => {
+  currentOrigin = els.originSelect.value;
+  renderRoute();
+});
+els.destSelect.addEventListener('change', () => {
+  currentDest = els.destSelect.value;
+  renderRoute();
+});
+
+document.querySelectorAll('.range-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.range-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentRangeDays = +btn.dataset.days;
+    renderRoute();
+  });
+});
+
+function renderRoute(){
+  if(!currentOrigin || !currentDest) return;
+  const now = new Date();
+  const cutoff = new Date(now.getTime() - currentRangeDays * 24 * 60 * 60 * 1000);
+
+  let occurrences = allTrips.filter(t => t._origin === currentOrigin && t._dest === currentDest && t._pickupDate);
+  occurrences = occurrences.filter(t => t._pickupDate >= cutoff);
+  occurrences.sort((a,b) => a._pickupDate - b._pickupDate);
+
+  renderStats(occurrences);
+  renderChart(occurrences, cutoff, now);
+  renderOccurrenceTable(occurrences);
+}
+
+function renderStats(occurrences){
+  const count = occurrences.length;
+  let avgGapDays = '—', nextExpected = '—';
+  if(count >= 2){
+    const gaps = [];
+    for(let i = 1; i < occurrences.length; i++){
+      gaps.push((occurrences[i]._pickupDate - occurrences[i-1]._pickupDate) / (1000*60*60*24));
+    }
+    const avg = gaps.reduce((a,b) => a+b, 0) / gaps.length;
+    avgGapDays = avg.toFixed(1) + 'd';
+    const last = occurrences[occurrences.length - 1]._pickupDate;
+    const next = new Date(last.getTime() + avg * 24*60*60*1000);
+    nextExpected = next.toLocaleDateString(undefined, {weekday:'short', month:'short', day:'numeric'});
+  }
+  const avgPrice = count ? (occurrences.reduce((a,t) => a + (parseFloat(t['Price (EUR)']) || 0), 0) / count).toFixed(0) : '—';
+
+  els.laneStats.innerHTML = `
+    <div class="stat-box"><div class="num">${count}</div><div class="lbl">Occurrences</div></div>
+    <div class="stat-box"><div class="num">${avgGapDays}</div><div class="lbl">Avg. gap</div></div>
+    <div class="stat-box"><div class="num">${nextExpected}</div><div class="lbl">Next expected</div></div>
+    <div class="stat-box"><div class="num">€${avgPrice}</div><div class="lbl">Avg. price</div></div>
+  `;
+}
+
+function renderChart(occurrences, rangeStart, rangeEnd){
+  const w = 880, h = 220, padL = 46, padR = 16, padT = 16, padB = 34;
+  const plotW = w - padL - padR, plotH = h - padT - padB;
+
+  if(occurrences.length === 0){
+    els.chartWrap.innerHTML = '<p class="hint">No occurrences of this lane in the selected time range.</p>';
+    return;
+  }
+
+  const x = d => padL + ((d - rangeStart) / (rangeEnd - rangeStart)) * plotW;
+  const y = hour => padT + plotH - (hour / 24) * plotH;
+
+  let svg = `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;">`;
+
+  // hour gridlines
+  [0,6,12,18,24].forEach(hr => {
+    svg += `<line class="grid-line" x1="${padL}" y1="${y(hr)}" x2="${w-padR}" y2="${y(hr)}"/>`;
+    svg += `<text x="${padL-8}" y="${y(hr)+4}" font-size="10" fill="#7a7568" text-anchor="end">${hr}:00</text>`;
+  });
+
+  // day gridlines (weekly)
+  const totalDays = (rangeEnd - rangeStart) / (1000*60*60*24);
+  const dayStep = totalDays > 45 ? 7 : (totalDays > 20 ? 3 : 1);
+  for(let d = 0; d <= totalDays; d += dayStep){
+    const dt = new Date(rangeStart.getTime() + d*24*60*60*1000);
+    const xx = x(dt);
+    svg += `<line class="grid-line" x1="${xx}" y1="${padT}" x2="${xx}" y2="${h-padB}"/>`;
+    svg += `<text x="${xx}" y="${h-padB+16}" font-size="10" fill="#7a7568" text-anchor="middle">${dt.toLocaleDateString(undefined,{month:'short',day:'numeric'})}</text>`;
+  }
+
+  svg += `<line class="axis-line" x1="${padL}" y1="${h-padB}" x2="${w-padR}" y2="${h-padB}"/>`;
+  svg += `<line class="axis-line" x1="${padL}" y1="${padT}" x2="${padL}" y2="${h-padB}"/>`;
+
+  occurrences.forEach(t => {
+    const dt = t._pickupDate;
+    const hour = dt.getHours() + dt.getMinutes()/60;
+    const cx = x(dt), cy = y(hour);
+    const label = `${dt.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})} ${dt.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'})} — €${t['Price (EUR)']||''}`;
+    svg += `<circle class="dot" cx="${cx}" cy="${cy}" r="5"><title>${escapeHtml(label)}</title></circle>`;
+  });
+
+  svg += '</svg>';
+  els.chartWrap.innerHTML = svg;
+}
+
+function renderOccurrenceTable(occurrences){
+  if(occurrences.length === 0){
+    els.occurrenceTable.innerHTML = '';
+    return;
+  }
+  const cols = ['Pickup','Dropoff','Distance','Trailer','R/P','Price','€/km','Trend','Drivers','Status'];
+  let html = '<tr>' + cols.map(c => `<th>${c}</th>`).join('') + '</tr>';
+  [...occurrences].reverse().forEach(t => {
+    html += '<tr>' +
+      `<td>${escapeHtml(t['Pickup Time']||'')}</td>` +
+      `<td>${escapeHtml(t['Dropoff Time']||'')}</td>` +
+      `<td>${escapeHtml(t['Distance (km)']||'')} km</td>` +
+      `<td>${escapeHtml(t['Trailer Type']||'')}</td>` +
+      `<td>${t['R/P (Required/Provided)'] ? `<span class="badge purple">${escapeHtml(t['R/P (Required/Provided)'])}</span>` : ''}</td>` +
+      `<td>€${escapeHtml(t['Price (EUR)']||'')}</td>` +
+      `<td>€${escapeHtml(t['Price/km (EUR)']||'')}</td>` +
+      `<td>${escapeHtml(t['Price Trend']||'')}</td>` +
+      `<td>${escapeHtml(t['1/2 Drivers']||'')}</td>` +
+      `<td>${escapeHtml(t['Status']||'')}</td>` +
+    '</tr>';
+  });
+  els.occurrenceTable.innerHTML = html;
+}
+</script>
+</body>
+</html>
